@@ -1,6 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+	"sync"
+	"text/template"
+)
 
 type Recipient struct {
 	Name  string
@@ -11,11 +16,31 @@ func main() {
 	fmt.Println("Email Dispatcher")
 	recipientChannel := make(chan Recipient)
 
-	done := make(chan bool)
+	var wg sync.WaitGroup
 
 	go loadRecipient("users.csv", recipientChannel)
 
-	go emailWorker(1, recipientChannel, done)
+	emailWorkerCount := 5
 
-	<-done
+	for i := 1; i <= emailWorkerCount; i++ {
+		wg.Add(1)
+		go emailWorker(i, recipientChannel, &wg)
+	}
+
+	wg.Wait()
+
+}
+
+func executeTempplate(r Recipient) (string, error) {
+	t, err := template.ParseFiles("email.tmpl")
+	if err != nil {
+		return "", err
+	}
+
+	var tmplBuf bytes.Buffer
+	err = t.Execute(&tmplBuf, r)
+	if err != nil {
+		return "", err
+	}
+	return tmplBuf.String(), nil
 }
